@@ -116,6 +116,8 @@ def selectElectrode(num):
     master.mainloop()
 
 def sendPulseSignal():
+    global send
+    global stop
     global pulse_train # [amplitude, width, period, duration], pulse_train[3] = duration
     global electrode_status
     global rehamove_connection
