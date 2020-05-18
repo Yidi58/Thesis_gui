@@ -129,6 +129,7 @@ def sendPulseSignal():
                 rehamove_connection.set_pulse(pulse_train[0], pulse_train[1])
                 rehamove_connection.start("blue", pulse_train[2])
             while ((time.time()-start) < pulse_train[3]) and stop == 0: # if the time passed is still within the set duration and stop button is not pressed
+                send = 1 # record the status
                 master.after(10, master.update()) # update the interface
                 rehamove_connection.update() # update the rehamove
 
