@@ -4,6 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import ImageTk, Image
 import time
+import sys
+from rehamove import * 
+
 
 ## initiate global variables
 global electrode_status
@@ -11,6 +14,9 @@ electrode_status = [0,0,0,0,0,0,0,0]  # check the status of the electrodes
 
 global customized_pulse
 customized_pulse = [[1,2],[3,4]]  # store the customized pulse
+
+global pulse_train
+pulse_train = [0,0,0,0] # represent amplitude, width, period, duration respectively
 
 global cus_duration 
 cus_duration = 0 # total duration of the customized pulse
@@ -27,20 +33,38 @@ send = 0  # record the status, sending or not
 global stop
 stop = 0  # check stop button status
 
+global rehamove_connection
+rehamove_connection = 0  # initiate the connection
+ 
 ## Design the pulse
 def designPulse():
+    global amplitude_input
+    global width_input
+    global period_input
     global duration_input
-    global repeat_input
-    amp = 1
-    freq = int(repeat_input.get())
-    dur = int(duration_input.get())
-    D = np.linspace(0, dur,num=dur*10)
-    P = freq
-    assist = dur/P
-    width = dur/(2*P)
-    sig = amp*((D%assist+0.02) < width)
-    plt.plot(D,sig)
-    plt.show()
+    global pulse_train
+    try:
+        pulse_train[0] = int(amplitude_input.get())
+        pulse_train[1] = int(width_input.get())
+        pulse_train[2] = int(period_input.get())
+        pulse_train[3] = int(duration_input.get())
+        if pulse_train[0] <= 0 or pulse_train[1] <= 0 or pulse_train[2] <= 0 or pulse_train[3] <= 0:
+            messagebox.showinfo("Error", "Cannot be zero or negative number")
+    except ValueError:
+         messagebox.showinfo("Error", "Inappropriate input")
+    print(pulse_train)
+
+# these commented codes are the original ones
+##    amp = 1
+##    freq = int(repeat_input.get())
+##    dur = int(duration_input.get())
+##    D = np.linspace(0, dur,num=dur*10)
+##    P = freq
+##    assist = dur/P
+##    width = dur/(2*P)
+##    sig = amp*((D%assist+0.02) < width)
+##    plt.plot(D,sig)
+##    plt.show()
 
 ## Design customized pulse
 def customPulse():
@@ -91,18 +115,44 @@ def selectElectrode(num):
     electrode_array[index].config(image=img)
     master.mainloop()
 
-## send message to the stimulator
+def sendPulseSignal():
+    global pulse_train # [amplitude, width, period, duration], pulse_train[3] = duration
+    global electrode_status
+    global rehamove_connection
+    if electrode_status.count(1) != 2: # check if two electrodes are selected
+        messagebox.showinfo("Error", "Choose exact two channels")
+    else:
+        if send == 0: # no existed sending
+            start = time.time()
+            rehamove_connection.change_mode(1) # change to mid-level
+            if stop == 0: # if stop button is not pressed
+                rehamove_connection.set_pulse(pulse_train[0], pulse_train[1])
+                rehamove_connection.start("blue", pulse_train[2])
+            while ((time.time()-start) < pulse_train[3]) and stop == 0: # if the time passed is still within the set duration and stop button is not pressed
+                master.after(10, master.update()) # update the interface
+                rehamove_connection.update() # update the rehamove
+
+            # if the duration is complete, or if the stop button is pressed
+            rehamove_connection.end()
+            send = 0
+            stop = 0
+## send custom pulse signal message to the stimulator
 def sendSignal():  
     global send
     global stop
     global cus_duration
+    global cus_amp
     global cus_wid
     global customized_pulse
     global electrode_status
-    if electrode_status.count(1) != 2:
+    if electrode_status.count(1) != 2: # check if two electrodes are selected
         messagebox.showinfo("Error", "Choose exact two channels")
     else:
-        if send == 0:
+        if send == 0: # if no starting signal send
+            #global rehamove_connection
+            # rehamove_connection.change_mode(1)
+            # rehamove_connection.set_pulse(int(cus_amp), int(cus_wid))
+            #rehamove_connection.start("
             print(send)
             start = time.time()
             while((time.time()-start)*1000 < cus_duration) and stop == 0: # check stop button
@@ -121,8 +171,14 @@ def sendSignal():
 def stopSignal():
     global stop
     stop = 1
+    
 
 master = Tk()
+
+# connect with the stimulator
+rehamove_connection = Rehamove("COM7")
+
+# start building the frame
 signal = Frame(master, bg = "white")
 electrode = Frame(master, bg = "white")
 signal.pack(fill=X, side=TOP)
@@ -135,19 +191,31 @@ electrode_pic = Frame(electrode, bg="white")
 electrode_pic.pack(side=LEFT)
 electrode_arrangement = Frame(electrode, bg="white")
 electrode_arrangement.pack(expand=1)
+
 ##pulse_signal
 design_signal = Label(pulse_signal, text = "Design pulse train", bg = "light yellow")
 design_signal.grid(row = 1, padx = 5)
-repeat = Label(pulse_signal, text = "Repeat times: ", bg = "white")
-repeat.grid(row = 2, padx = 5)
-repeat_input = Entry(pulse_signal)
-repeat_input.grid(row = 2, column = 6)
-duration = Label(pulse_signal, text = "Duration(ms): ", bg = "white")
-duration.grid(row = 3, padx = 5)
+amplitude = Label(pulse_signal, text = "Amplitude (mA): ", bg = "white")
+amplitude.grid(row = 2, padx = 5)
+amplitude_input = Entry(pulse_signal)
+amplitude_input.grid(row = 2, column = 6)
+width = Label(pulse_signal, text = "Pulse width (us): ", bg = "white")
+width.grid(row = 3, padx = 5)
+width_input = Entry(pulse_signal)
+width_input.grid(row = 3, column = 6)
+period = Label(pulse_signal, text = "Interval between pulses (ms): ", bg = "white")
+period.grid(row = 4, padx = 5)
+period_input = Entry(pulse_signal)
+period_input.grid(row = 4, column = 6)
+duration = Label(pulse_signal, text = "Duration(s): ", bg = "white")
+duration.grid(row = 5, padx = 5)
 duration_input = Entry(pulse_signal)
-duration_input.grid(row = 3, column = 6)
+duration_input.grid(row = 5, column = 6)
 submit_button = Button(pulse_signal, text = "Finish", command = lambda: designPulse(), bg = "white")
 submit_button.grid(row = 6, padx = 5)
+pulse_train_stimulation_button = Button(pulse_signal, text = "Stimulate", command = lambda: sendPulseSignal(), bg = "white")
+pulse_train_stimulation_button.grid(row=6,column=20, padx=5)
+
 ##custom_signal
 custom_design_signal = Label(custom_signal, text = "Design custom pulse", bg = "light yellow")
 custom_design_signal.grid(row=1, padx=5)
@@ -169,6 +237,8 @@ custom_duration_input = Entry(custom_signal)
 custom_duration_input.grid(row=5, column=6, padx=5)
 custom_submit_button = Button(custom_signal, text = "Finish", command = lambda: customPulse(), bg = "white")
 custom_submit_button.grid(row=7, padx = 5)
+custom_stimulation_button = Button(custom_signal, text = "Stimulate", command = lambda: sendSignal(), bg = "white")
+custom_stimulation_button.grid(row=7,column=20, padx=5)
 w = Scale(custom_signal, from_ = -100, to=100, orient = HORIZONTAL)
 w.grid(row = 8, padx = 5)
 
@@ -211,8 +281,7 @@ electrode_array = [electrode_button1,electrode_button2, electrode_button3,
                    electrode_button4, electrode_button5, electrode_button6,
                    electrode_button7, electrode_button8]
 
-stimulation_button = Button(electrode_arrangement, text = "Stimulate", command = lambda: sendSignal(), bg = "white")
-stimulation_button.grid(row=3,column=30, padx=30)
+
 
 stop_button = Button(electrode_arrangement, text = "Stop", command = lambda: stopSignal(), bg = "white")
 stop_button.grid(row=4,column=30, padx=30)
